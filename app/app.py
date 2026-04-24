@@ -1,19 +1,34 @@
+import os
 import streamlit as st
 import joblib
 import pandas as pd
 
-# Load model & preprocessors
-model = joblib.load("../models/model.pkl")
-scaler = joblib.load("../models/scaler.pkl")
-le_gender = joblib.load("../models/le_gender.pkl")
-le_geo = joblib.load("../models/le_geo.pkl")
+# ---------- PATH SETUP ----------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, ".."))
+MODEL_DIR = os.path.join(ROOT_DIR, "models")
+
+# ---------- LOAD MODELS (CACHED) ----------
+@st.cache_resource
+def load_models():
+    try:
+        model = joblib.load(os.path.join(MODEL_DIR, "model.pkl"))
+        scaler = joblib.load(os.path.join(MODEL_DIR, "scaler.pkl"))
+        le_gender = joblib.load(os.path.join(MODEL_DIR, "le_gender.pkl"))
+        le_geo = joblib.load(os.path.join(MODEL_DIR, "le_geo.pkl"))
+        return model, scaler, le_gender, le_geo
+    except Exception as e:
+        st.error(f"❌ Model loading failed: {e}")
+        st.stop()
+
+model, scaler, le_gender, le_geo = load_models()
 
 FEATURE_COLUMNS = [
     "CreditScore", "Geography", "Gender", "Age", "Tenure",
     "Balance", "NumOfProducts", "HasCrCard", "IsActiveMember", "EstimatedSalary"
 ]
 
-# ---------- PAGE CONFIG ----------
+# ---------- CONFIG ----------
 st.set_page_config(page_title="Customer Churn Predictor", layout="wide")
 
 # ---------- STYLE ----------
@@ -29,7 +44,7 @@ st.markdown('<div class="main-title">📊 Customer Churn Prediction</div>', unsa
 st.write("Predict churn risk and understand key drivers using machine learning")
 st.markdown("---")
 
-# ---------- SESSION STATE ----------
+# ---------- SESSION ----------
 if "prediction_done" not in st.session_state:
     st.session_state.prediction_done = False
 if "prediction" not in st.session_state:
@@ -52,14 +67,16 @@ credit_card = st.sidebar.selectbox("Has Credit Card", ["Yes", "No"])
 active = st.sidebar.selectbox("Is Active Member", ["Yes", "No"])
 salary = st.sidebar.number_input("Estimated Salary", 0.0, 200000.0, 50000.0)
 
-# Reset button
+# Reset button (better)
 if st.sidebar.button("🔄 Reset"):
-    st.session_state.prediction_done = False
+    for key in ["prediction_done", "prediction", "prob"]:
+        st.session_state[key] = None if key != "prediction_done" else False
+    st.experimental_rerun()
 
-# ---------- MAIN LAYOUT ----------
+# ---------- LAYOUT ----------
 col1, col2 = st.columns([2, 1])
 
-# ---------- LEFT: SUMMARY ----------
+# ---------- SUMMARY ----------
 with col1:
     st.subheader("📋 Customer Summary")
 
@@ -79,7 +96,7 @@ with col1:
         **Active Member:** {active}  
         """)
 
-# ---------- RIGHT: PREDICTION ----------
+# ---------- PREDICTION ----------
 with col2:
     st.subheader("🔍 Prediction")
 
@@ -100,21 +117,25 @@ with col2:
                 "EstimatedSalary": salary
             }])
 
-            # Encode
-            data["Geography"] = le_geo.transform(data["Geography"])
-            data["Gender"] = le_gender.transform(data["Gender"])
+            # Safe encoding
+            try:
+                data["Geography"] = le_geo.transform(data["Geography"])
+                data["Gender"] = le_gender.transform(data["Gender"])
+            except:
+                st.error("⚠️ Encoding error: unseen category detected")
+                st.stop()
 
-            # Order
+            # Order + scale
             data = data[FEATURE_COLUMNS]
-
-            # Scale
             data_scaled = scaler.transform(data)
 
             # Predict
-            prediction = model.predict(data_scaled)[0]
             prob = model.predict_proba(data_scaled)[0][1]
 
-        # Save state
+            # Custom threshold (important!)
+            threshold = 0.4
+            prediction = int(prob > threshold)
+
         st.session_state.prediction_done = True
         st.session_state.prediction = prediction
         st.session_state.prob = prob
@@ -128,18 +149,15 @@ with col2:
         st.markdown("---")
         st.subheader("📈 Result")
 
-        # Result card
         if prediction == 1:
             st.error("🚨 High Risk — Immediate retention action recommended")
         else:
             st.success("✅ Low Risk — Customer likely to stay")
 
-        # Probability
         st.metric("Churn Probability", f"{prob:.2%}")
-
         st.progress(int(prob * 100))
 
-        # Risk messaging
+        # Risk logic
         if prob < 0.3:
             st.success("🟢 Low Risk — No action needed")
         elif prob < 0.7:
@@ -168,12 +186,9 @@ with col2:
 
             st.bar_chart(importance_df.set_index("Feature"))
 
-            # ---------- KEY DRIVERS ----------
             st.subheader("🧠 Key Drivers")
 
-            top_features = importance_df.head(3)
-
-            for _, row in top_features.iterrows():
+            for _, row in importance_df.head(3).iterrows():
                 st.write(f"• {row['Feature']} strongly influences prediction")
 
     else:
