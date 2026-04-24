@@ -6,7 +6,7 @@ An end-to-end Machine Learning project that predicts whether a customer is likel
 
 ## 🚀 Live Demo
 
-👉 *(Add your deployed Streamlit link here)*
+👉 [*(Add your deployed Streamlit link here)*](https://codsoftcustomerchurnprediction-zowd2wdbwnjnbtvbkzsmbl.streamlit.app/)
 
 ---
 
