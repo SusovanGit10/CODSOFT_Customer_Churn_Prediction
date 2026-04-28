@@ -136,7 +136,7 @@ def main():
     # ==============================
     best_name, best_model, best_acc, best_roc = sorted(
         results,
-        key=lambda x: (x[3], x[2]),  # ROC-AUC first, then accuracy
+        key=lambda x: (x[3], x[2]),  
         reverse=True
     )[0]
 

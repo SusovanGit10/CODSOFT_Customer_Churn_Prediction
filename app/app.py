@@ -71,7 +71,7 @@ salary = st.sidebar.number_input("Estimated Salary", 0.0, 200000.0, 50000.0)
 if st.sidebar.button("🔄 Reset"):
     for key in ["prediction_done", "prediction", "prob"]:
         st.session_state[key] = None if key != "prediction_done" else False
-    st.experimental_rerun()
+    st.rerun()
 
 # ---------- LAYOUT ----------
 col1, col2 = st.columns([2, 1])
